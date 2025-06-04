@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  color: #213547;
+  background-color: #ffffff;
+}
+
+#app {
+  width: 100%;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+/* 美化滚动条 */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* 去除默认边框和聚焦样式 */
+button:focus, input:focus, textarea:focus {
+  outline: none;
+}
+
+/* 输入框和按钮的过渡效果 */
+button, input, textarea {
+  transition: all 0.2s ease;
+}
+
+/* 禁用浏览器默认的拖拽行为 */
+[draggable="false"] {
+  -webkit-user-drag: none;
+}
+
+/* 禁止文本选择 */
+.no-select {
+  user-select: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: rgba(255, 255, 255, 0.87);
+    background-color: #242424;
+  }
+  body {
+    color: rgba(255, 255, 255, 0.87);
+    background-color: #1a1a1a;
+  }
+}
+
+/* highlight.js 代码高亮自动换行 */
+.hljs {
+  white-space: pre-wrap !important;
+  word-wrap: break-word !important;
+}
+
+.hljs code {
+  white-space: pre-wrap !important;
+  word-wrap: break-word !important;
+} 
