@@ -113,7 +113,7 @@ exports.chatWithAIStream = async (req, res) => {
             }
             messages = [
                 {
-                    role: 'system', content: `你是一个天地图API专家，生成的代码要严格遵循天地图官方API规范。以下是常用功能的标准写法示例：
+                    role: 'system', content: `您好，我是政务版地理底图生成器，能根据用户描述基于地理底图API生成应用代码。。以下是常用功能的标准写法示例：
 
 默认的密钥：1d0dcde810c40ba139e57ec790e56a05
 
@@ -207,6 +207,106 @@ exports.chatWithAIStream = async (req, res) => {
 <body onLoad="onLoad()">
 <div id="mapDiv"></div>
 </body>
+</html>
+
+【行驶轨迹示例代码 当用户问到驾驶轨迹的时候，你一定要参考这个代码来进行生成】
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+    <meta name="keywords" content="天地图"/>
+    <title>天地图－地图API－范例－单个标注点沿直线的轨迹运动</title>
+    <script type="text/javascript" src="http://api.tianditu.gov.cn/api?v=4.0&tk=您的密钥"></script>
+    <script src="http://lbs.tianditu.gov.cn/js/lib/jquery/jquery-1.7.2.min.js"></script>
+    <script src="http://lbs.tianditu.gov.cn/js/lib/d3/d3.min.js" charset="utf-8"></script>
+    <script src="http://lbs.tianditu.gov.cn/api/js4.0/opensource/openlibrary/D3SvgOverlay.js"></script>
+    <script src="http://lbs.tianditu.gov.cn/api/js4.0/opensource/openlibrary/CarTrack.js"></script>
+    <style type="text/css">
+        body, html{width: 100%;height: 100%;margin:0;font-family:"微软雅黑";}
+        #mapDiv{height:400px;width:100%;}
+        input,p { margin-top: 10px; margin-left: 5px; font-size: 14px;  }
+    </style>
+    <script>
+        var map, drivingRoute;
+        var zoom = 13;
+        var _CarTrack;
+        var startIcon = "http://lbs.tianditu.gov.cn/images/bus/start.png";	//起点图标
+        var endIcon = "http://lbs.tianditu.gov.cn/images/bus/end.png";		//终点图标
+        function onLoad() {
+            map = new T.Map('mapDiv');
+            map.centerAndZoom(new T.LngLat(116.40069, 39.89945), zoom);
+            var config = {
+                policy: 0,	//驾车策略
+                onSearchComplete: searchResult	//检索完成后的回调函数
+            };
+            drivingRoute = new T.DrivingRoute(map, config);
+            searchDrivingRoute()
+        }
+
+        function searchDrivingRoute() {
+            map.clearOverLays();
+            var startLngLat = new T.LngLat(116.354060,39.905650);
+            var endLngLat = new T.LngLat(116.428130,39.903550);
+            //驾车路线搜索
+            drivingRoute.search(startLngLat, endLngLat);
+        }
+
+        function createRoute(lnglats, lineColor) {
+            _CarTrack = new T.CarTrack(map, {
+                interval: 20,
+                speed: 10,
+                dynamicLine: true,
+                Datas: lnglats,
+                polylinestyle: {color: "#2C64A7", width: 5, opacity: 0.9}
+            })
+        }
+
+        //添加起始点
+        function createStartMarker(result) {
+            var startMarker = new T.Marker(result.getStart(), {
+                icon: new T.Icon({
+                    iconUrl: startIcon,
+                    iconSize: new T.Point(44, 34),
+                    iconAnchor: new T.Point(12, 31)
+                })
+            });
+            map.addOverLay(startMarker);
+            var endMarker = new T.Marker(result.getEnd(), {
+                icon: new T.Icon({
+                    iconUrl: endIcon,
+                    iconSize: new T.Point(44, 34),
+                    iconAnchor: new T.Point(12, 31)
+                })
+            });
+            map.addOverLay(endMarker);
+        }
+        
+        function searchResult(result) {
+            //添加起始点
+            createStartMarker(result);
+            obj = result;
+            //获取方案个数
+            var routes = result.getNumPlans();
+            for (var i = 0; i < routes; i++) {
+                //获得单条驾车方案结果对象
+                var plan = result.getPlan(i);
+                createRoute(plan.getPath());
+
+            }
+        }
+
+    </script>
+</head>
+<body onLoad="onLoad()">
+<div id="mapDiv"></div>
+<p>本例演示单个标注点沿直线的轨迹运动</p>
+<div >
+    <input type="button" value="开始" onClick="_CarTrack.start();"/>
+    <input type="button" value="暂停" onClick="_CarTrack.pause();"/>
+    <input type="button" value="结束" onClick="_CarTrack.stop();"/>
+</div>
+
+</body>
 </html>` },
                 { role: 'assistant', content: '你是一个地图生成器，能根据用户描述生成地图代码。' },
                 { role: 'user', content: userMsg }
@@ -216,6 +316,212 @@ exports.chatWithAIStream = async (req, res) => {
         }
         if (!messages || !Array.isArray(messages) || messages.length === 0) {
             return res.status(400).json({ message: '消息不能为空且必须是数组格式' });
+        }
+
+        // 如果没有system消息，添加一个默认的system消息
+        if (!messages.some(msg => msg.role === 'system')) {
+            messages.unshift({
+                role: 'system', content: `你是一个天地图API专家，生成的代码要严格遵循天地图官方API规范。你回复的内容中，不能省略代码。 以下是常用功能的标准写法示例：
+
+默认的密钥：1d0dcde810c40ba139e57ec790e56a05
+
+【行驶轨迹示例代码 当用户问到驾驶轨迹的时候，你一定要参考上面这个代码来进行生成】
+
+【为地图上的标记点添加提示信息窗口】
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+    <title>天地图－地图API－范例－多个点的信息窗口</title>
+    <script type="text/javascript" src="http://api.tianditu.gov.cn/api?v=4.0&tk=1d0dcde810c40ba139e57ec790e56a05"></script>
+    <style type="text/css">
+        body, html{width: 100%;height: 100%;margin:0;font-family:"微软雅黑";}
+        #mapDiv{height:100%;width:100%;}
+        input,p { margin-top: 10px; margin-left: 5px; font-size: 14px;  }
+    </style>
+    <script>
+        var map
+        var zoom = 15;
+        function onLoad() {
+
+            var data_info = [[116.417854,39.921988,"地址：北京市东城区王府井大街88号乐天银泰百货八层"],
+                [116.406605,39.921585,"地址：北京市东城区东华门大街"],
+                [116.412222,39.912345,"地址：北京市东城区正义路甲5号"]
+            ];
+
+            //初始化地图对象
+            map = new T.Map("mapDiv");
+            //设置显示地图的中心点和级别
+            map.centerAndZoom(new T.LngLat(116.41593, 39.92313), zoom);
+
+            for(var i=0;i<data_info.length;i++){
+                var marker = new T.Marker(new T.LngLat(data_info[i][0],data_info[i][1]));  // 创建标注
+                var content = data_info[i][2];
+                map.addOverLay(marker);               // 将标注添加到地图中
+                addClickHandler(content,marker);
+            }
+            function addClickHandler(content,marker){
+                marker.addEventListener("click",function(e){
+                    openInfo(content,e)}
+                );
+            }
+            function openInfo(content,e){
+                var point = e.lnglat;
+                marker = new T.Marker(point);// 创建标注
+                var markerInfoWin = new T.InfoWindow(content,{offset:new T.Point(0,-30)}); // 创建信息窗口对象
+                map.openInfoWindow(markerInfoWin,point); //开启信息窗口
+            }
+        }
+    </script>
+</head>
+<body onLoad="onLoad()">
+<div id="mapDiv"></div>
+</body>
+</html>
+
+【添加海量点图层】
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+    <meta name="keywords" content="天地图"/>
+    <title>天地图－地图API－范例－海量密集点</title>
+    <script src="http://api.tianditu.gov.cn/api?v=4.0&tk=1d0dcde810c40ba139e57ec790e56a05" type="text/javascript"></script>
+    <script src="http://lbs.tianditu.gov.cn/api/js4.0/opensource/data/points-sample-data.js"></script>
+    <style type="text/css">body,html{width:100%;height:100%;margin:0;font-family:"Microsoft YaHei"}#mapDiv{width:100%;height:100%}input,b,p{margin-left:5px;font-size:14px}</style>
+    <script>
+        var map;
+        var zoom = 4;
+        var lnglats;
+        var _CloudCollection;
+        function onLoad() {
+            map = new T.Map('mapDiv');
+            map.centerAndZoom(new T.LngLat(108.95, 34.27), zoom)
+            lnglats = [];
+            for (var i = 0; i < data.data.length; i++) {
+                var ll = new T.LngLat(data.data[i][0], data.data[i][1])
+                lnglats.push(ll)
+            }
+            if (document.createElement('canvas').getContext) {  // 判断当前浏览器是否支持绘制海量点
+                _CloudCollection = new T.CloudMarkerCollection(lnglats, {
+                    color: 'blue',
+                    SizeType: TDT_POINT_SIZE_SMALL
+                })
+                map.addOverLay(_CloudCollection);
+            } else {
+                alert('此示例目前只有在IE9及以上浏览器打开');
+            }
+        }
+    </script>
+</head>
+<body onLoad="onLoad()">
+<div id="mapDiv"></div>
+</body>
+</html>
+
+【行驶轨迹示例代码 当用户问到驾驶轨迹的时候，你一定要参考这个代码来进行生成】
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+    <meta name="keywords" content="天地图"/>
+    <title>天地图－地图API－范例－单个标注点沿直线的轨迹运动</title>
+    <script type="text/javascript" src="http://api.tianditu.gov.cn/api?v=4.0&tk=您的密钥"></script>
+    <script src="http://lbs.tianditu.gov.cn/js/lib/jquery/jquery-1.7.2.min.js"></script>
+    <script src="http://lbs.tianditu.gov.cn/js/lib/d3/d3.min.js" charset="utf-8"></script>
+    <script src="http://lbs.tianditu.gov.cn/api/js4.0/opensource/openlibrary/D3SvgOverlay.js"></script>
+    <script src="http://lbs.tianditu.gov.cn/api/js4.0/opensource/openlibrary/CarTrack.js"></script>
+    <style type="text/css">
+        body, html{width: 100%;height: 100%;margin:0;font-family:"微软雅黑";}
+        #mapDiv{height:400px;width:100%;}
+        input,p { margin-top: 10px; margin-left: 5px; font-size: 14px;  }
+    </style>
+    <script>
+        var map, drivingRoute;
+        var zoom = 13;
+        var _CarTrack;
+        var startIcon = "http://lbs.tianditu.gov.cn/images/bus/start.png";	//起点图标
+        var endIcon = "http://lbs.tianditu.gov.cn/images/bus/end.png";		//终点图标
+        function onLoad() {
+            map = new T.Map('mapDiv');
+            map.centerAndZoom(new T.LngLat(116.40069, 39.89945), zoom);
+            var config = {
+                policy: 0,	//驾车策略
+                onSearchComplete: searchResult	//检索完成后的回调函数
+            };
+            drivingRoute = new T.DrivingRoute(map, config);
+            searchDrivingRoute()
+        }
+
+        function searchDrivingRoute() {
+            map.clearOverLays();
+            var startLngLat = new T.LngLat(116.354060,39.905650);
+            var endLngLat = new T.LngLat(116.428130,39.903550);
+            //驾车路线搜索
+            drivingRoute.search(startLngLat, endLngLat);
+        }
+
+        function createRoute(lnglats, lineColor) {
+            _CarTrack = new T.CarTrack(map, {
+                interval: 20,
+                speed: 10,
+                dynamicLine: true,
+                Datas: lnglats,
+                polylinestyle: {color: "#2C64A7", width: 5, opacity: 0.9}
+            })
+        }
+
+        //添加起始点
+        function createStartMarker(result) {
+            var startMarker = new T.Marker(result.getStart(), {
+                icon: new T.Icon({
+                    iconUrl: startIcon,
+                    iconSize: new T.Point(44, 34),
+                    iconAnchor: new T.Point(12, 31)
+                })
+            });
+            map.addOverLay(startMarker);
+            var endMarker = new T.Marker(result.getEnd(), {
+                icon: new T.Icon({
+                    iconUrl: endIcon,
+                    iconSize: new T.Point(44, 34),
+                    iconAnchor: new T.Point(12, 31)
+                })
+            });
+            map.addOverLay(endMarker);
+        }
+        
+        function searchResult(result) {
+            //添加起始点
+            createStartMarker(result);
+            obj = result;
+            //获取方案个数
+            var routes = result.getNumPlans();
+            for (var i = 0; i < routes; i++) {
+                //获得单条驾车方案结果对象
+                var plan = result.getPlan(i);
+                createRoute(plan.getPath());
+
+            }
+        }
+
+    </script>
+</head>
+<body onLoad="onLoad()">
+<div id="mapDiv"></div>
+<p>本例演示单个标注点沿直线的轨迹运动</p>
+<div >
+    <input type="button" value="开始" onClick="_CarTrack.start();"/>
+    <input type="button" value="暂停" onClick="_CarTrack.pause();"/>
+    <input type="button" value="结束" onClick="_CarTrack.stop();"/>
+</div>
+
+</body>
+</html>
+
+【行驶轨迹示例代码 当用户问到驾驶轨迹的时候，你一定要参考上面这个代码来进行生成】
+</html>`
+            });
         }
 
         console.log('流式API请求:', JSON.stringify({
@@ -345,213 +651,3 @@ exports.chatWithAIStream = async (req, res) => {
         res.end();
     }
 };
-
-// 保留原有的地图生成函数接口，但实际使用Claude API
-exports.generateMap = async (req, res) => {
-    try {
-        const { description } = req.body;
-
-        if (!description) {
-            return res.status(400).json({ message: '地图描述不能为空' });
-        }
-
-        console.log('生成地图请求:', description);
-
-        // 构建消息体
-        const messages = [
-            {
-                role: "system",
-                content: "你是一个专业的地图生成助手，擅长根据用户描述生成天地图API代码。请生成完整、可运行的HTML和JavaScript代码。"
-            },
-            {
-                role: "user",
-                content: `请根据以下描述生成一个天地图的代码：${description}`
-            }
-        ];
-
-        // 调用Claude API，尝试启用扩展思考
-        const response = await axios.post('https://aihubmix.com/v1/chat/completions', {
-            model: "claude-3-5-sonnet-20241022",
-            messages: messages,
-            max_tokens: 4000,
-            extended_thinking: true
-        }, {
-            headers: {
-                'Authorization': `Bearer ${process.env.CLAUDE_API_KEY}`,
-                'Content-Type': 'application/json',
-                'anthropic-beta': 'extended-thinking-2024-01-11'
-            },
-            timeout: 30000 // 设置30秒超时
-        });
-
-        console.log('生成地图API响应状态:', response.status);
-
-        // 获取API响应
-        const aiResponse = response.data;
-
-        // 提取内容
-        let content = '';
-
-        // 根据Claude API返回格式处理内容
-        if (aiResponse.choices && aiResponse.choices[0] && aiResponse.choices[0].message) {
-            content = aiResponse.choices[0].message.content;
-        } else if (aiResponse.content && Array.isArray(aiResponse.content)) {
-            const textItem = aiResponse.content.find(item => item.type === 'text');
-            content = textItem ? textItem.text : '';
-        }
-
-        // 提取思考过程
-        let thinkingProcess = '';
-        if (aiResponse.extended_thinking) {
-            thinkingProcess = aiResponse.extended_thinking;
-        } else if (aiResponse.choices && aiResponse.choices[0] && aiResponse.choices[0].message && aiResponse.choices[0].message.extended_thinking) {
-            thinkingProcess = aiResponse.choices[0].message.extended_thinking;
-        }
-
-        // 如果thinking为空，生成一个模拟的思考过程
-        if (!thinkingProcess) {
-            thinkingProcess = `分析用户需求: "${description}"\n\n` +
-                "1. 解析用户输入\n" +
-                "   - 提取关键地理位置信息\n" +
-                "   - 确定地图显示范围和缩放级别\n" +
-                "   - 识别需要添加的标记点\n\n" +
-                "2. 规划地图实现方案\n" +
-                "   - 使用天地图API创建地图实例\n" +
-                "   - 设置适当的地图中心点和缩放级别\n" +
-                "   - 添加必要的标记点和信息窗口\n\n" +
-                "3. 生成代码\n" +
-                "   - 创建HTML页面结构\n" +
-                "   - 引入天地图API\n" +
-                "   - 编写JavaScript初始化地图\n" +
-                "   - 添加标记点和交互功能";
-        }
-
-        // 从回复中提取地图代码
-        let mapCode = content;
-        // 尝试从回复中提取HTML代码块
-        const htmlMatch = content.match(/```(?:html)?([\s\S]*?)```/);
-        if (htmlMatch && htmlMatch[1]) {
-            mapCode = htmlMatch[1].trim();
-        }
-
-        res.status(200).json({
-            thinkingProcess,
-            mapCode
-        });
-
-    } catch (error) {
-        console.error('生成地图错误:', error);
-        console.error('错误详情:', error.response?.data || '无响应数据');
-        console.error('错误状态:', error.response?.status || '无状态码');
-        console.error('错误信息:', error.message);
-
-        res.status(500).json({
-            message: '服务器错误，生成地图失败',
-            error: error.message,
-            details: error.response?.data || '无详细信息'
-        });
-    }
-};
-
-// 模拟AI思考过程
-function generateThinkingProcess(description) {
-    return `分析用户需求: "${description}"
-
-1. 解析用户输入
-   - 提取关键地理位置信息
-   - 确定地图显示范围和缩放级别
-   - 识别需要添加的标记点或覆盖物
-
-2. 规划地图实现方案
-   - 确定使用天地图API的矢量地图
-   - 设置适当的地图中心点和缩放级别
-   - 准备添加必要的标记点
-
-3. 生成代码
-   - 引入天地图API
-   - 初始化地图容器
-   - 设置地图参数
-   - 添加标记点和信息窗口
-   - 优化用户交互体验`;
-}
-
-// 模拟生成地图代码
-function generateMapCode(description) {
-    // 从描述中提取可能的位置信息（这里是简化处理）
-    const locationMatch = description.match(/北京|上海|广州|深圳|天安门|故宫|长城/);
-    const location = locationMatch ? locationMatch[0] : '北京';
-
-    // 根据不同位置设置不同的坐标
-    let center = [116.40769, 39.89945]; // 默认北京
-    let zoom = 12;
-
-    if (location === '上海') {
-        center = [121.4737, 31.2304];
-    } else if (location === '广州') {
-        center = [113.2644, 23.1291];
-    } else if (location === '深圳') {
-        center = [114.0579, 22.5431];
-    } else if (location === '天安门') {
-        center = [116.3912, 39.9060];
-        zoom = 16;
-    } else if (location === '故宫') {
-        center = [116.3972, 39.9165];
-        zoom = 15;
-    } else if (location === '长城') {
-        center = [116.5681, 40.4319];
-        zoom = 14;
-    }
-
-    return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>天地图 - ${location}</title>
-    <style>
-        html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-        }
-        #mapContainer {
-            width: 100%;
-            height: 100%;
-        }
-    </style>
-    <!-- 引入天地图API，使用自己的天地图密钥 -->
-    <script src="https://api.tianditu.gov.cn/api?v=4.0&tk=1d0dcde810c40ba139e57ec790e56a05"></script>
-</head>
-<body>
-    <div id="mapContainer"></div>
-    
-    <script>
-        // 初始化地图
-        function initMap() {
-            // 创建地图实例
-            var map = new T.Map('mapContainer');
-            
-            // 设置地图中心点和缩放级别
-            map.centerAndZoom(new T.LngLat(${center[0]}, ${center[1]}), ${zoom});
-            
-            // 添加缩放控件
-            var zoomControl = new T.Control.Zoom();
-            map.addControl(zoomControl);
-            
-            // 添加标记点
-            var marker = new T.Marker(new T.LngLat(${center[0]}, ${center[1]}));
-            map.addOverLay(marker);
-            
-            // 添加信息窗口
-            var infoWin = new T.InfoWindow("${location}");
-            marker.addEventListener("click", function() {
-                marker.openInfoWindow(infoWin);
-            });
-        }
-        
-        // 页面加载完成后初始化地图
-        window.onload = initMap;
-    </script>
-</body>
-</html>`;
-} 

@@ -11,12 +11,21 @@ dotenv.config();
 const app = express();
 
 // 中间件
-app.use(cors());
+app.use(cors({
+    origin: ['http://localhost:5173', 'http://localhost:5174'],
+    credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // 静态资源服务
 app.use('/static', express.static(path.join(__dirname, 'public')));
+
+// 添加调试日志
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    next();
+});
 
 // 路由
 app.use('/api/share', require('./routes/shareRoutes'));

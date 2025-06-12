@@ -1,5 +1,8 @@
 <template>
     <div ref="containerRef" class="generator-view h-screen w-full flex flex-col overflow-hidden">
+        <!-- 顶部导航栏 -->
+        <HeaderBar />
+
         <!-- 桌面布局 -->
         <div class="hidden lg:flex flex-grow flex-row overflow-hidden">
             <!-- 聊天面板 -->
@@ -75,6 +78,7 @@ import ChatPanel from '../components/ChatPanel.vue';
 import CodeArtifacts from '../components/CodeArtifacts.vue';
 import MapRenderer from '../components/MapRenderer.vue';
 import ResizableDivider from '../components/ResizableDivider.vue';
+import HeaderBar from '../components/HeaderBar.vue';
 
 const mapStore = useMapStore();
 const error = computed(() => mapStore.error);

@@ -15,6 +15,20 @@ export default defineConfig({
             '/api': {
                 target: 'http://localhost:3000',
                 changeOrigin: true,
+                secure: false,
+                ws: true,
+                configure: (proxy, options) => {
+                    // 代理配置
+                    proxy.on('error', (err, req, res) => {
+                        console.log('代理错误:', err);
+                    });
+                    proxy.on('proxyReq', (proxyReq, req, res) => {
+                        console.log('代理请求:', req.method, req.url);
+                    });
+                    proxy.on('proxyRes', (proxyRes, req, res) => {
+                        console.log('代理响应:', proxyRes.statusCode, req.url);
+                    });
+                }
             },
         },
         host: '0.0.0.0',

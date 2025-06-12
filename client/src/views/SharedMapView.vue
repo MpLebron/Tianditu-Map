@@ -1,5 +1,8 @@
 <template>
     <div class="shared-map-view h-screen w-full flex flex-col overflow-hidden">
+        <!-- 顶部导航栏 -->
+        <HeaderBar />
+
         <div class="flex-grow relative">
             <div v-if="isLoading" class="h-full flex items-center justify-center">
                 <p class="text-gray-500">加载中...</p>
@@ -35,6 +38,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { getSharedMap } from '../services/shareService';
+import HeaderBar from '../components/HeaderBar.vue';
 
 const route = useRoute();
 const mapFrame = ref(null);
