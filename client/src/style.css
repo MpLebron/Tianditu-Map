@@ -87,13 +87,79 @@ button, input, textarea {
   }
 }
 
-/* highlight.js 代码高亮自动换行 */
+/* highlight.js 代码高亮增强样式 */
 .hljs {
   white-space: pre-wrap !important;
   word-wrap: break-word !important;
+  background: #1e1e1e !important;
+  color: #dcdcdc !important;
+  padding: 0.5em !important;
+  border-radius: 0.3em !important;
+  font-family: 'Consolas', 'Monaco', 'Andale Mono', 'Ubuntu Mono', monospace !important;
 }
 
 .hljs code {
   white-space: pre-wrap !important;
   word-wrap: break-word !important;
+  font-family: 'Consolas', 'Monaco', 'Andale Mono', 'Ubuntu Mono', monospace !important;
+}
+
+/* 代码块样式增强 */
+.code-block, .code-block-partial {
+  margin: 1rem 0 !important;
+  border-radius: 0.5rem !important;
+  overflow: hidden !important;
+  border: 1px solid #2d2d2d !important;
+}
+
+.code-block .code-header, .code-block-partial .code-header {
+  background-color: #2d2d2d !important;
+  color: #e5e7eb !important;
+  padding: 0.5rem 0.75rem !important;
+  font-size: 0.8rem !important;
+  font-family: monospace !important;
+  font-weight: bold !important;
+}
+
+.code-block pre.hljs, .code-block-partial pre.hljs {
+  margin: 0 !important;
+  padding: 1rem !important;
+  background-color: #1e1e1e !important;
+}
+
+/* 语法高亮颜色增强 */
+.hljs-keyword {
+  color: #569cd6 !important;
+}
+
+.hljs-string {
+  color: #ce9178 !important;
+}
+
+.hljs-number {
+  color: #b5cea8 !important;
+}
+
+.hljs-comment {
+  color: #6a9955 !important;
+}
+
+.hljs-function {
+  color: #dcdcaa !important;
+}
+
+.hljs-tag {
+  color: #569cd6 !important;
+}
+
+.hljs-name {
+  color: #9cdcfe !important;
+}
+
+.hljs-attr {
+  color: #9cdcfe !important;
+}
+
+.hljs-built_in {
+  color: #4ec9b0 !important;
 } 

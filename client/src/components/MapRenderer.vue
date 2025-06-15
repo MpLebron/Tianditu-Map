@@ -98,6 +98,9 @@ onMounted(() => {
             mapFrame.value.srcdoc = generatedMapCode.value;
         } else {
             mapFrame.value.srcdoc = defaultMapCode;
+            // 将默认地图代码设置到mapStore中，确保第一次提问时能包含在系统消息里
+            mapStore.setGeneratedMapCode(defaultMapCode);
+            mapStore.setMapDescription('默认北京市中心地图');
         }
     }
 });

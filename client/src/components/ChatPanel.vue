@@ -127,18 +127,11 @@
 
 <script setup>
 import { ref, nextTick, watch } from 'vue';
-import hljs from 'highlight.js/lib/core';
-import html from 'highlight.js/lib/languages/xml';
-import javascript from 'highlight.js/lib/languages/javascript';
-import css from 'highlight.js/lib/languages/css';
-import { chatWithAI, chatWithAIStream } from '../services/aiService';
+import hljs from 'highlight.js';  // 改为全量导入highlight.js
+import { chatWithAIStream } from '../services/aiService';
 import { useMapStore } from '../store/mapStore';
 import axios from 'axios';
-
-hljs.registerLanguage('html', html);
-hljs.registerLanguage('javascript', javascript);
-hljs.registerLanguage('js', javascript);
-hljs.registerLanguage('css', css);
+import systemMessage from '../promptTemplate/systemMessage.js';
 
 const description = ref('');
 const mapStore = useMapStore();
@@ -159,8 +152,24 @@ const chatHistory = ref([
   }
 ]);
 
+// 保存发送给API的消息历史，确保在会话过程中保持一致
+const apiMessageHistory = ref([
+  {
+    role: 'system',
+    content: systemMessage
+  },
+  {
+    role: 'assistant',
+    content: '您好，我是天地图网页应用开发智能体，能根据用户描述基于地理底图API生成应用代码。'
+  }
+]);
+
 // 加载状态
 const isLoading = ref(false);
+
+// 重试计数器
+const retryCount = ref(0);
+const MAX_RETRIES = 2;
 
 // 流式响应控制
 const streamController = ref(null);
@@ -216,30 +225,44 @@ function afterLeave(el) {
 function formatMessage(content) {
   if (!content) return '';
 
+  // console.log('格式化消息内容:', content.substring(0, 100) + '...');
+
   // 处理代码块，包括未闭合的代码块
-  return content.replace(/```(html|javascript|js|css)?([\s\S]*?)(?:```|$)/g, (match, lang, code) => {
+  return content.replace(/```(html|javascript|js|css|python)?([\s\S]*?)(?:```|$)/g, (match, lang, code) => {
     if (!code) return match;
     try {
-      const language = lang || 'html';
+      // 确定语言，如果未指定则尝试自动检测
+      const language = lang || '';
       let highlighted = '';
+
+      // console.log('尝试高亮代码:', language, code.substring(0, 50) + '...');
 
       // 尝试高亮代码
       try {
-        highlighted = hljs.highlight(code.trim(), { language }).value;
+        if (language) {
+          highlighted = hljs.highlight(code.trim(), { language }).value;
+        } else {
+          // 自动检测语言
+          highlighted = hljs.highlightAuto(code.trim()).value;
+        }
+        // console.log('高亮成功');
       } catch (e) {
+        console.error('高亮失败:', e);
         highlighted = code; // 如果高亮失败，使用原始代码
       }
 
       // 判断是否是未闭合的代码块（没有结束的```）
       const isUnclosed = !match.endsWith('```');
+      // console.log('是否未闭合代码块:', isUnclosed);
 
       // 根据是否闭合使用不同的样式
       if (isUnclosed) {
-        return `<div class="code-block code-block-partial"><div class="code-header">${language || 'code'} (正在输入...)</div><pre class="hljs"><code>${highlighted}</code></pre></div>`;
+        return `<div class="code-block code-block-partial"><div class="code-header">${language || '代码'} (正在输入...)</div><pre class="hljs"><code>${highlighted}</code></pre></div>`;
       } else {
-        return `<div class="code-block"><div class="code-header">${language || 'code'}</div><pre class="hljs"><code>${highlighted}</code></pre></div>`;
+        return `<div class="code-block"><div class="code-header">${language || '代码'}</div><pre class="hljs"><code>${highlighted}</code></pre></div>`;
       }
     } catch (e) {
+      console.error('代码块处理错误:', e);
       return `<div class="code-block"><pre class="hljs"><code>${code}</code></pre></div>`;
     }
   });
@@ -287,6 +310,15 @@ async function uploadFile(file) {
   try {
     isLoading.value = true;
 
+    // 检查文件类型
+    const fileExt = file.name.split('.').pop().toLowerCase();
+    const supportedTypes = ['geojson', 'json']; // 前端硬编码支持的类型，未来可从后端获取
+    if (!supportedTypes.includes(fileExt)) {
+      alert(`不支持的文件类型: .${fileExt}。支持的类型: ${supportedTypes.map(t => '.' + t).join(', ')}`);
+      isLoading.value = false;
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', file);
 
@@ -306,7 +338,45 @@ async function uploadFile(file) {
       const fileData = response.data.file;
       console.log('服务器返回的文件名:', fileData.filename);
 
-      uploadedFile.value = fileData;
+      // 保存文件信息和处理结果
+      uploadedFile.value = {
+        ...fileData,
+        fileType: fileData.type,
+        processData: response.data.processResult
+      };
+
+      // 如果有处理结果，添加到描述中
+      if (response.data.processResult && response.data.processResult.success) {
+        // 如果有summaryText，直接使用它
+        if (response.data.processResult.summaryText) {
+          // description.value = `用户上传了一个${fileData.type.toUpperCase()}文件 "${fileData.filename}"，以下是文件分析结果：\n\n${response.data.processResult.summaryText}`;
+        } else {
+          // 兼容旧版本，构建基本描述
+          let fileDescription = `我上传了一个${fileData.type.toUpperCase()}文件 "${fileData.filename}"`;
+
+          // 针对不同文件类型构建不同的描述
+          if (fileData.type === 'geojson' || fileData.type === 'json') {
+            const summary = response.data.processResult.summary;
+
+            if (summary.type) {
+              fileDescription += `，类型为 ${summary.type}`;
+            }
+
+            if (summary.featureCount) {
+              fileDescription += `，包含 ${summary.featureCount} 个要素`;
+            }
+
+            if (summary.propertyFields && summary.propertyFields.length > 0) {
+              fileDescription += `，属性字段包括: ${summary.propertyFields.join(', ')}`;
+            }
+          }
+          // 未来可以添加其他文件类型的描述逻辑
+
+          // 将描述添加到输入框
+          description.value = fileDescription;
+        }
+      }
+
       console.log('文件上传成功:', uploadedFile.value);
     } else {
       console.error('服务器返回错误:', response.data.message);
@@ -383,97 +453,293 @@ const handleEnterKey = async (event) => {
     streamController.value = null;
   }
 
-  // 添加用户消息到聊天历史
-  const userMsg = {
-    role: 'user',
-    content: description.value.trim()
-  };
+  // 重置重试计数器
+  retryCount.value = 0;
 
-  // 如果有上传的文件，添加到消息中
-  if (uploadedFile.value) {
-    userMsg.file = uploadedFile.value;
+  // 发送消息
+  await sendMessage();
+};
+
+// 发送消息并处理响应的函数
+const sendMessage = async () => {
+  // ===== 第1步：准备发送给API的历史消息 =====
+  // 使用保存的API消息历史，确保包含之前的所有对话
+  const messageHistory = [...apiMessageHistory.value];
+
+  console.log('messageHistory:', messageHistory);
+
+  console.log('初始API消息历史:', messageHistory);
+
+  // ===== 第2步：添加当前用户消息到UI显示的聊天历史和API历史（如果是第一次尝试）=====
+  if (retryCount.value === 0) {
+    const userMsg = {
+      role: 'user',
+      content: description.value.trim()
+    };
+
+    // 如果有上传的文件，添加到消息中
+    if (uploadedFile.value) {
+      userMsg.file = uploadedFile.value;
+    }
+
+    // 添加到UI显示的聊天历史
+    chatHistory.value.push(userMsg);
+
+    // 添加到API消息历史 - 确保不包含文件对象
+    apiMessageHistory.value.push({
+      role: 'user',
+      content: description.value.trim()
+    });
   }
 
-  chatHistory.value.push(userMsg);
-
-  // 清空输入框和文件
+  // 保存用户消息内容并清空输入框
   const userMessage = description.value;
-  description.value = '';
-  const fileInfo = uploadedFile.value;
-  uploadedFile.value = null;
+  if (retryCount.value === 0) {
+    description.value = '';
+  }
 
-  // 添加AI思考中的消息
+  // ===== 第3步：处理文件分析信息（仅在第一次尝试时）=====
+  let fileAnalysisText = '';
+  if (retryCount.value === 0 && uploadedFile.value && uploadedFile.value.processData) {
+    // 创建文件分析文本
+    fileAnalysisText = `用户上传了一个${uploadedFile.value.fileType.toUpperCase()}文件 "${uploadedFile.value.filename}"，以下是文件分析结果：\n\n`;
+
+    // 优先使用保存的分析文本
+    if (uploadedFile.value.analysisText) {
+      fileAnalysisText += uploadedFile.value.analysisText;
+    }
+    // 如果没有分析文本，使用summaryText或textContent
+    else if (uploadedFile.value.processData.summaryText) {
+      fileAnalysisText += uploadedFile.value.processData.summaryText;
+    } else if (uploadedFile.value.processData.textContent) {
+      fileAnalysisText += `文件内容预览：\n${uploadedFile.value.processData.textContent}`;
+    }
+
+    // console.log('文件分析文本已生成:', fileAnalysisText.substring(0, 50) + '...');
+  }
+
+  // ===== 第3.5步：将文件分析信息添加到系统消息中（仅在第一次尝试时）=====
+  if (retryCount.value === 0 && fileAnalysisText) {
+    // 查找系统消息
+    let systemMsgIndex = messageHistory.findIndex(msg => msg.role === 'system');
+
+    if (systemMsgIndex !== -1) {
+      // 如果存在系统消息，将文件分析信息添加到系统消息后面
+      messageHistory[systemMsgIndex].content += `\n\n${fileAnalysisText}`;
+
+      // 同时更新apiMessageHistory中的系统消息
+      const apiSystemMsgIndex = apiMessageHistory.value.findIndex(msg => msg.role === 'system');
+      if (apiSystemMsgIndex !== -1) {
+        apiMessageHistory.value[apiSystemMsgIndex].content += `\n\n${fileAnalysisText}`;
+      }
+
+      // console.log('文件分析信息已添加到系统消息');
+    } else {
+      // 如果不存在系统消息，创建一个新的系统消息
+      const newSystemMsg = {
+        role: 'system',
+        content: `您是天地图API专家。${fileAnalysisText}`
+      };
+      messageHistory.unshift(newSystemMsg);
+      apiMessageHistory.value.unshift(newSystemMsg);
+      // console.log('创建了新的系统消息，包含文件分析信息');
+    }
+  }
+
+  if (retryCount.value === 0) {
+    uploadedFile.value = null;
+  }
+
+  // ===== 第3.6步：添加当前HTML代码作为上下文（仅在第一次尝试时）=====
+  if (retryCount.value === 0) {
+    // 从mapStore获取当前HTML代码
+    const currentHtmlCode = mapStore.generatedMapCode;
+    console.log('mapStore中是否有HTML代码:', !!currentHtmlCode);
+
+    if (currentHtmlCode) {
+      // console.log('找到当前HTML代码，长度:', currentHtmlCode.length);
+      // console.log('HTML代码前50个字符:', currentHtmlCode.substring(0, 50));
+
+      // 将HTML代码添加到系统消息中，而不是作为单独的消息
+      let systemMsgIndex = messageHistory.findIndex(msg => msg.role === 'system');
+
+      if (systemMsgIndex !== -1) {
+        // 如果存在系统消息，将HTML代码添加到系统消息后面
+        messageHistory[systemMsgIndex].content += `\n\n当前页面上渲染的HTML页面的代码：\n\`\`\`html\n${currentHtmlCode}\n\`\`\``;
+
+        // 同时更新apiMessageHistory中的系统消息
+        const apiSystemMsgIndex = apiMessageHistory.value.findIndex(msg => msg.role === 'system');
+        if (apiSystemMsgIndex !== -1) {
+          apiMessageHistory.value[apiSystemMsgIndex].content += `\n\n当前页面上渲染的HTML页面的代码代码：\n\`\`\`html\n${currentHtmlCode}\n\`\`\``;
+        }
+
+        console.log('HTML代码已添加到系统消息');
+      } else {
+        // 如果不存在系统消息，创建一个新的系统消息
+        const newSystemMsg = {
+          role: 'system',
+          content: `您是天地图API专家。\n\n当前HTML代码：\n\`\`\`html\n${currentHtmlCode}\n\`\`\``
+        };
+        messageHistory.unshift(newSystemMsg);
+        apiMessageHistory.value.unshift(newSystemMsg);
+        console.log('创建了新的系统消息，包含HTML代码');
+      }
+    } else {
+      console.log('未找到当前HTML代码，不添加HTML上下文');
+    }
+  }
+
+  // ===== 第4步：在UI中显示AI正在思考的消息 =====
   const aiMessageIndex = chatHistory.value.length;
   chatHistory.value.push({
     role: 'ai',
     content: '',
-    thinking: '正在分析您的请求...'
+    thinking: retryCount.value > 0 ? '正在重试...' : '正在分析您的请求...'
   });
 
   // 设置加载状态
   isLoading.value = true;
 
   try {
-    // 准备历史消息数组，只保留最近的10条消息
-    const messageHistory = chatHistory.value
-      .slice(0, aiMessageIndex) // 不包含当前添加的AI消息
-      .filter(msg => msg.role === 'user' || msg.role === 'assistant') // 只保留用户和助手消息
-      .map(msg => ({
-        role: msg.role === 'ai' ? 'assistant' : msg.role, // 将'ai'角色转换为'assistant'
-        content: msg.content
-      }))
-      .slice(-10); // 只保留最近10条消息
+    // console.log(`发送给API的最终消息历史 (尝试 ${retryCount.value + 1}/${MAX_RETRIES + 1}):`, JSON.stringify(messageHistory, null, 2));
 
-    // 使用流式响应，传入历史消息
+    // ===== 第5步：发送请求并处理流式响应 =====
     let accumulatedContent = '';
+    let hasReceivedContent = false;
+
+    // console.log('mapStore.generatedMapCode:', mapStore.generatedMapCode);
+
     streamController.value = chatWithAIStream(
-      userMessage + (fileInfo ? `\n(用户上传了文件: ${fileInfo.filename}, 可通过 ${fileInfo.url} 访问)` : ''),
-      // 思考过程回调
+      userMessage, // 传递用户消息内容，确保aiService中能正确处理
+      // 思考过程回调 - 更新UI中的思考过程
       (thinking) => {
         chatHistory.value[aiMessageIndex].thinking = thinking;
       },
-      // 内容回调
+      // 内容回调 - 更新UI中的回复内容
       (content) => {
+        hasReceivedContent = true;
         accumulatedContent += content;
         chatHistory.value[aiMessageIndex].content = accumulatedContent;
 
         // 检查是否包含代码块（包括未闭合的）
-        const codeBlockRegex = /```(html|javascript|js|css)([\s\S]*?)(?:```|$)/;
+        const codeBlockRegex = /```(html|javascript|js|css|python)?([\s\S]*?)(?:```|$)/;
         const mapCodeMatch = accumulatedContent.match(codeBlockRegex);
 
         if (mapCodeMatch) {
           // 提取代码内容，无论是否闭合
+          const language = mapCodeMatch[1] || 'html';
           const codeContent = mapCodeMatch[2];
-          mapStore.setGeneratedMapCode(codeContent);
-          mapStore.setMapDescription(userMessage);
+
+          // 只有当是HTML代码时才更新地图
+          if (language === 'html' || !language) {
+            // console.log('更新地图代码');
+            mapStore.setGeneratedMapCode(codeContent);
+            mapStore.setMapDescription(userMessage);
+          }
         }
       },
-      // 完成回调
+      // 完成回调 - 处理响应完成后的操作
       () => {
         isLoading.value = false;
         streamController.value = null;
+
+        // 检查是否收到了内容
+        if (!hasReceivedContent && retryCount.value < MAX_RETRIES) {
+          // 如果没有收到内容且未超过最大重试次数，则重试
+          console.warn(`没有收到AI回复，正在重试 (${retryCount.value + 1}/${MAX_RETRIES})...`);
+          retryCount.value++;
+
+          // 移除上一次的空回复
+          chatHistory.value.pop();
+
+          // 重新发送消息
+          setTimeout(() => sendMessage(), 1000);
+          return;
+        }
+
+        // ===== 第6步：将AI回复添加到API消息历史中 =====
+        const aiResponse = chatHistory.value[aiMessageIndex];
+        if (aiResponse && aiResponse.content) {
+          // 将AI回复添加到API消息历史
+          const assistantMsg = {
+            role: 'assistant',
+            content: aiResponse.content
+          };
+
+          // 确保不重复添加相同内容的消息
+          const lastApiMsg = apiMessageHistory.value[apiMessageHistory.value.length - 1];
+          if (!lastApiMsg || lastApiMsg.role !== 'assistant' || lastApiMsg.content !== aiResponse.content) {
+            apiMessageHistory.value.push(assistantMsg);
+            console.log('AI回复已添加到API消息历史:', assistantMsg);
+            console.log('当前完整API消息历史:', JSON.stringify(apiMessageHistory.value, null, 2));
+          }
+
+          // 重置重试计数器
+          retryCount.value = 0;
+        } else if (retryCount.value >= MAX_RETRIES) {
+          console.error('达到最大重试次数，AI仍未回复');
+          chatHistory.value[aiMessageIndex].content = '抱歉，AI未能生成回复，请重试。';
+          chatHistory.value[aiMessageIndex].thinking = '回复失败';
+
+          // 重置重试计数器
+          retryCount.value = 0;
+        }
       },
       // 错误回调
       (error) => {
         console.error('流式对话错误:', error);
-        chatHistory.value[aiMessageIndex].content = '抱歉，发生了错误，无法获取回复。';
-        chatHistory.value[aiMessageIndex].thinking = `错误详情: ${error.message || '未知错误'}`;
-        isLoading.value = false;
-        streamController.value = null;
+
+        if (retryCount.value < MAX_RETRIES) {
+          // 如果未超过最大重试次数，则重试
+          console.warn(`对话出错，正在重试 (${retryCount.value + 1}/${MAX_RETRIES})...`);
+          retryCount.value++;
+
+          // 移除上一次的错误回复
+          chatHistory.value.pop();
+
+          // 重新发送消息
+          setTimeout(() => sendMessage(), 1000);
+        } else {
+          // 如果已达到最大重试次数，显示错误信息
+          chatHistory.value[aiMessageIndex] = {
+            role: 'ai',
+            content: '抱歉，发生了错误，无法获取回复。',
+            thinking: `错误详情: ${error.message || '未知错误'}`
+          };
+
+          // 重置重试计数器
+          retryCount.value = 0;
+          isLoading.value = false;
+        }
       },
-      // 传入历史消息
+      // 传入消息历史
       messageHistory
     );
   } catch (error) {
     console.error('AI对话错误:', error);
-    // 更新为错误消息
-    chatHistory.value[aiMessageIndex] = {
-      role: 'ai',
-      content: '抱歉，发生了错误，无法获取回复。',
-      thinking: `错误详情: ${error.message || '未知错误'}`
-    };
-    // 取消加载状态
-    isLoading.value = false;
+
+    if (retryCount.value < MAX_RETRIES) {
+      // 如果未超过最大重试次数，则重试
+      console.warn(`对话出错，正在重试 (${retryCount.value + 1}/${MAX_RETRIES})...`);
+      retryCount.value++;
+
+      // 移除上一次的错误回复
+      chatHistory.value.pop();
+
+      // 重新发送消息
+      setTimeout(() => sendMessage(), 1000);
+    } else {
+      // 如果已达到最大重试次数，显示错误信息
+      chatHistory.value[aiMessageIndex] = {
+        role: 'ai',
+        content: '抱歉，发生了错误，无法获取回复。',
+        thinking: `错误详情: ${error.message || '未知错误'}`
+      };
+
+      // 重置重试计数器
+      retryCount.value = 0;
+      isLoading.value = false;
+    }
   }
 };
 </script>

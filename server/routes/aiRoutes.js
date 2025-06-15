@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const aiController = require('../controllers/aiController');
 const uploadController = require('../controllers/uploadController');
+const fileProcessorFactory = require('../controllers/fileProcessors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -39,14 +40,45 @@ const storage = multer.diskStorage({
     }
 });
 
-const upload = multer({ storage: storage });
+// 文件过滤器，根据支持的文件类型列表进行过滤
+const fileFilter = (req, file, cb) => {
+    // 获取文件扩展名
+    let originalname = file.originalname;
+    try {
+        originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
+    } catch (e) {
+        console.error('文件名编码转换失败:', e);
+    }
 
-// 与AI对话（标准非流式）
-router.post('/chat', aiController.chatWithAI);
+    const ext = path.extname(originalname).toLowerCase();
+
+    // 检查是否是支持的文件类型
+    const supportedTypes = fileProcessorFactory.getSupportedFileTypes();
+    if (!supportedTypes.includes(ext)) {
+        return cb(new Error(`不支持的文件类型: ${ext}。支持的类型: ${supportedTypes.join(', ')}`), false);
+    }
+
+    // 检查MIME类型（可选，有些文件类型可能没有标准MIME类型）
+    if (ext === '.geojson' || ext === '.json') {
+        if (file.mimetype !== 'application/json' && file.mimetype !== 'application/geo+json') {
+            return cb(new Error('MIME类型不匹配'), false);
+        }
+    }
+    // 未来可以在这里添加其他文件类型的MIME检查
+
+    cb(null, true);
+};
+
+const upload = multer({
+    storage: storage,
+    fileFilter: fileFilter,
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 限制文件大小为10MB
+    }
+});
 
 // 与AI对话（流式响应）
 router.post('/chat/stream', aiController.chatWithAIStream);
-router.get('/chat/stream', aiController.chatWithAIStream);
 
 // 文件上传路由
 router.post('/upload', upload.single('file'), uploadController.uploadFile);
